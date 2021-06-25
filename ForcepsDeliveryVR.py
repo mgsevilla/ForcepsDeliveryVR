@@ -18,7 +18,7 @@ class ForcepsDeliveryVR(ScriptedLoadableModule):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "ForcepsDeliveryVR"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["Virtual Reality"]  # TODO: set categories (folders where the module shows up in the module selector)
-    self.parent.dependencies = []  # TODO: add here list of module names that this module requires
+    self.parent.dependencies = []  
     self.parent.contributors = ["Monica Garcia-Sevilla (Universidad de Las Palmas de Gran Canaria)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
@@ -27,8 +27,7 @@ See more information in <a href="https://github.com/organization/projectname#For
 """
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """
-This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
-and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+This file was developed by Monica Garcia-Sevilla, ... and ... at Universidad de Las Palmas de Gran Canaria.
 """
 
     # Additional initialization step after application startup is complete
@@ -99,8 +98,6 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     ScriptedLoadableModuleWidget.__init__(self, parent)
     VTKObservationMixin.__init__(self)  # needed for parameter node observation
     self.logic = None
-    self._parameterNode = None
-    self._updatingGUIFromParameterNode = False
 
   def setup(self):
     """
@@ -110,6 +107,12 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     # Widget variables
     self.logic = ForcepsDeliveryVRLogic()
+
+    # CREATE PATHS
+    self.ForcepsDeliveryVR_modelsPath = slicer.modules.forcepsdeliveryvr.path.replace("ForcepsDeliveryVR.py","") + 'Resources/Models/'
+    
+
+    # UI definition
 
     # Load widget from .ui file (created by Qt Designer).
     # Additional widgets can be instantiated manually and added to self.layout.
@@ -122,25 +125,6 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     # "setMRMLScene(vtkMRMLScene*)" slot.
     # uiWidget.setMRMLScene(slicer.mrmlScene)
 
-    # Create logic class. Logic implements all computations that should be possible to run
-    # in batch mode, without a graphical user interface.
-    self.logic = ForcepsDeliveryVRLogic()
-
-    # Connections
-
-    # These connections ensure that we update parameter node when scene is closed
-    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
-    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
-
-    # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
-    # (in the selected parameter node).
-    # self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    # self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    # self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    # self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-    # self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-
-    
     #
     # INITIALIZATION
     #
@@ -150,7 +134,6 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     # Layout within the dummy collapsible button
     initFormLayout = qt.QFormLayout(self.initCollapsibleButton)
-
 
     # Activate VR
     self.activateVRButton = qt.QPushButton()
@@ -163,15 +146,26 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     self.loadDataButton.enabled = True
     initFormLayout.addRow(self.loadDataButton)  
 
-
-    # connections
-    # LOADING
-    self.activateVRButton.connect('clicked(bool)', self.onSwitchVirtualRealityActivation)
-    self.loadDataButton.connect('clicked(bool)', self.onLoadDataButtonClicked)
-
+    # add here remaining ui objects
+    # ...
 
     # Add vertical spacer
     self.layout.addStretch(1)
+
+
+    # Create logic class. Logic implements all computations that should be possible to run
+    # in batch mode, without a graphical user interface.
+    self.logic = ForcepsDeliveryVRLogic()
+
+    # Connections
+
+    # # These connections ensure that we update parameter node when scene is closed
+    # self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
+    # self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+
+    # INITIALIZATION
+    self.activateVRButton.connect('clicked(bool)', self.onSwitchVirtualRealityActivation)
+    self.loadDataButton.connect('clicked(bool)', self.onLoadDataButtonClicked)
 
 
   def cleanup(self):
@@ -180,36 +174,35 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     """
     self.removeObservers()
 
-  def enter(self):
-    """
-    Called each time the user opens this module.
-    """
-    print('enter')
+  # def enter(self):
+  #   """
+  #   Called each time the user opens this module.
+  #   """
+  #   print('enter')
 
-  def exit(self):
-    """
-    Called each time the user opens a different module.
-    """
-    # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
-    #self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
-    print('exit')
+  # def exit(self):
+  #   """
+  #   Called each time the user opens a different module.
+  #   """
+  #   # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
+  #   #self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+  #   print('exit')
 
-  def onSceneStartClose(self, caller, event):
-    """
-    Called just before the scene is closed.
-    """
-    print('scene start close')
+  # def onSceneStartClose(self, caller, event):
+  #   """
+  #   Called just before the scene is closed.
+  #   """
+  #   print('scene start close')
 
 
-  def onSceneEndClose(self, caller, event):
-    """
-    Called just after the scene is closed.
-    """
-    # If this module is shown while the scene is closed then recreate a new parameter node immediately
-    # if self.parent.isEntered:
-    #   self.initializeParameterNode()
-    print('scene end close')
-
+  # def onSceneEndClose(self, caller, event):
+  #   """
+  #   Called just after the scene is closed.
+  #   """
+  #   # If this module is shown while the scene is closed then recreate a new parameter node immediately
+  #   # if self.parent.isEntered:
+  #   #   self.initializeParameterNode()
+  #   print('scene end close')
 
 
   def onSwitchVirtualRealityActivation(self):
@@ -221,9 +214,54 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
       self.activateVRButton.setText("Deactivate VR")
       slicer.modules.virtualreality.viewWidget().updateViewFromReferenceViewCamera()
 
-  def onLoadDataButtonClicked(self):
-    print('load')
 
+  def onLoadDataButtonClicked(self):
+    logging.debug('Load models')
+
+    try:
+      self.forcepsLeftModel = slicer.util.getNode('ForcepsLeftModel')
+    except:
+      slicer.util.loadModel(self.ForcepsDeliveryVR_modelsPath + 'ForcepsLeftModel.stl')
+      self.forcepsLeftModel = slicer.util.getNode(pattern="ForcepsLeftModel")
+      self.forcepsLeftModelDisplay=self.forcepsLeftModel.GetModelDisplayNode()
+      self.forcepsLeftModelDisplay.SetColor([1,0,0])
+
+    try:
+      self.forcepsRightModel = slicer.util.getNode('ForcepsRightModel')
+    except:
+      slicer.util.loadModel(self.ForcepsDeliveryVR_modelsPath + 'ForcepsRightModel.stl')
+      self.forcepsRightModel = slicer.util.getNode(pattern="ForcepsRightModel")
+      self.forcepsRightModelDisplay=self.forcepsRightModel.GetModelDisplayNode()
+      self.forcepsRightModelDisplay.SetColor([0,0,1])
+
+    try:
+      self.babyBodyModel = slicer.util.getNode('BabyBodyModel')
+    except:
+      slicer.util.loadModel(self.ForcepsDeliveryVR_modelsPath + 'BabyBodyModel.stl')
+      self.babyBodyModel = slicer.util.getNode(pattern="BabyBodyModel")
+      self.babyBodyModelDisplay=self.babyBodyModel.GetModelDisplayNode()
+      self.babyBodyModelDisplay.SetColor([1,0.68,0.62])
+
+    try:
+      self.babyHeadModel = slicer.util.getNode('BabyHeadModel')
+    except:
+      slicer.util.loadModel(self.ForcepsDeliveryVR_modelsPath + 'BabyHeadModel.stl')
+      self.babyHeadModel = slicer.util.getNode(pattern="BabyHeadModel")
+      self.babyHeadModelDisplay=self.babyHeadModel.GetModelDisplayNode()
+      self.babyHeadModelDisplay.SetColor([1,0.68,0.62])
+
+    try:
+      self.motherModel = slicer.util.getNode('MotherModel')
+    except:
+      slicer.util.loadModel(self.ForcepsDeliveryVR_modelsPath + 'MotherModel.stl')
+      self.motherModel = slicer.util.getNode(pattern="MotherModel")
+      self.motherModelDisplay=self.motherModel.GetModelDisplayNode()
+      self.motherModelDisplay.SetColor([1,0.68,0.62])
+    #self.motherModel.SetSelectable(0)
+      # self.motherModelDisplay.SetOpacity(0.5)
+
+
+    self.loadDataButton.enabled = False
 
 
 
@@ -248,9 +286,28 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
     ScriptedLoadableModuleLogic.__init__(self)
     self.vrEnabled = False
     self.threeDView = slicer.app.layoutManager().threeDWidget(0).threeDView()
-    # self.volRenLogic = slicer.modules.volumerendering.logic()
     self.vrLogic = slicer.modules.virtualreality.logic()
 
+
+  def activateVirtualReality(self):
+    if (self.vrEnabled):
+      return
+    self.vrLogic.SetVirtualRealityConnected(True)
+    vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
+    vrViewNode.SetLighthouseModelsVisible(False)
+    # self.volumeRendDisplayNode.AddViewNodeID(vrViewNode.GetID())
+    # self.setDefaultBackgroundColor(vrViewNode)
+    self.vrLogic.SetVirtualRealityActive(True)
+    self.vrEnabled = True
+
+  def deactivateVirtualReality(self):
+    if (not self.vrEnabled):
+      return
+    self.vrLogic.SetVirtualRealityConnected(False)
+    self.vrLogic.SetVirtualRealityActive(False)
+    self.vrEnabled = False
+
+  
   def isVRInitialized():
     """Determine if VR has been initialized
     """
@@ -275,27 +332,4 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
         logging.error('Unable to access VR renderers')
         return None
     return rendererCollection.GetItemAsObject(0).GetActiveCamera()
-
-
-  def activateVirtualReality(self):
-    if (self.vrEnabled):
-      return
-    self.vrLogic.SetVirtualRealityConnected(True)
-    vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
-    vrViewNode.SetLighthouseModelsVisible(False)
-    # self.volumeRendDisplayNode.AddViewNodeID(vrViewNode.GetID())
-    # self.setDefaultBackgroundColor(vrViewNode)
-    self.vrLogic.SetVirtualRealityActive(True)
-    self.vrEnabled = True
-
-  def deactivateVirtualReality(self):
-    if (not self.vrEnabled):
-      return
-    self.vrLogic.SetVirtualRealityConnected(False)
-    self.vrLogic.SetVirtualRealityActive(False)
-    self.vrEnabled = False
-
-
-  
-
 
