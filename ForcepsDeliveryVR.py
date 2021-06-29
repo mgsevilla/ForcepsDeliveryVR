@@ -27,7 +27,7 @@ See more information in <a href="https://github.com/organization/projectname#For
 """
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """
-This file was developed by Monica Garcia-Sevilla, ... and ... at Universidad de Las Palmas de Gran Canaria.
+This file was developed by Monica Garcia-Sevilla and Abian Hernandez at Universidad de Las Palmas de Gran Canaria.
 """
 
     # Additional initialization step after application startup is complete
@@ -146,6 +146,14 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     self.loadDataButton.enabled = True
     initFormLayout.addRow(self.loadDataButton)  
 
+    # Controllers visibility
+    self.controllersVisibilitySelection = qt.QHBoxLayout()
+    initFormLayout.addRow(self.controllersVisibilitySelection)
+    self.controllersVisibilityCheckBox = qt.QCheckBox('Hide controllers')
+    self.controllersVisibilityCheckBox.checkable = True
+    self.controllersVisibilityCheckBox.checked = True
+    self.controllersVisibilitySelection.addWidget(self.controllersVisibilityCheckBox)
+
     # add here remaining ui objects
     # ...
 
@@ -163,9 +171,13 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     # self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     # self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+
     # INITIALIZATION
     self.activateVRButton.connect('clicked(bool)', self.onSwitchVirtualRealityActivation)
     self.loadDataButton.connect('clicked(bool)', self.onLoadDataButtonClicked)
+
+    # CONFIGURATION
+    self.controllersVisibilityCheckBox.connect('clicked(bool)', self.onControllerVisibilityCheckBoxClicked)
 
 
   def cleanup(self):
@@ -259,9 +271,21 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
       self.motherModelDisplay.SetColor([1,0.68,0.62])
     #self.motherModel.SetSelectable(0)
       # self.motherModelDisplay.SetOpacity(0.5)
+    
+
+    self.logic.applyForcepsTransform()
 
 
     self.loadDataButton.enabled = False
+
+  def onControllerVisibilityCheckBoxClicked(self):
+    logging.debug('change controller visibility')
+    if self.controllersVisibilityCheckBox.checked:
+      self.logic.changeControllerVisibility(False)
+    else:
+      self.logic.changeControllerVisibility(True)
+
+    
 
 
 
@@ -292,20 +316,48 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
   def activateVirtualReality(self):
     if (self.vrEnabled):
       return
-    self.vrLogic.SetVirtualRealityConnected(True)
+
+    self.vrLogic.SetVirtualRealityConnected(True)    
     vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
     vrViewNode.SetLighthouseModelsVisible(False)
+    vrViewNode.SetControllerModelsVisible(False)
+
+    # Just for being sure
+    reference = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode() # 3D View node
+    vrViewNode.SetAndObserveReferenceViewNode(reference)
     # self.volumeRendDisplayNode.AddViewNodeID(vrViewNode.GetID())
     # self.setDefaultBackgroundColor(vrViewNode)
-    self.vrLogic.SetVirtualRealityActive(True)
+
+
     self.vrEnabled = True
 
-  def deactivateVirtualReality(self):
-    if (not self.vrEnabled):
+    # Devices transforms visible to the scene
+    vrViewNode.SetControllerTransformsUpdate(True)
+    vrViewNode.SetHMDTransformUpdate(True)
+
+    vrViewNode.Modified()
+    
+    self.vrLogic.SetVirtualRealityActive(True)
+  
+
+  def applyForcepsTransform(self):
+    vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
+    if not vrViewNode or not vrViewNode.GetControllerTransformsUpdate():
       return
-    self.vrLogic.SetVirtualRealityConnected(False)
-    self.vrLogic.SetVirtualRealityActive(False)
-    self.vrEnabled = False
+      
+    forcepsLeftModel = slicer.util.getNode(pattern="ForcepsLeftModel")
+    print(vrViewNode.GetLeftControllerTransformNodeID())
+    forcepsLeftModel.SetAndObserveTransformNodeID(vrViewNode.GetLeftControllerTransformNodeID())
+
+    forcepsRightModel = slicer.util.getNode(pattern="ForcepsRightModel")
+    tranformNodeID = self.vrLogic.GetVirtualRealityViewNode().GetRightControllerTransformNodeID()
+    forcepsRightModel.SetAndObserveTransformNodeID(tranformNodeID)
+
+  def changeControllerVisibility(self, display):
+    self.vrLogic.SetVirtualRealityConnected(True)    
+    vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
+    vrViewNode.SetControllerModelsVisible(display)
+
 
   
   def isVRInitialized():
@@ -332,4 +384,6 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
         logging.error('Unable to access VR renderers')
         return None
     return rendererCollection.GetItemAsObject(0).GetActiveCamera()
+
+
 
