@@ -111,6 +111,17 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     # CREATE PATHS
     self.ForcepsDeliveryVR_modelsPath = slicer.modules.forcepsdeliveryvr.path.replace("ForcepsDeliveryVR.py","") + 'Resources/Models/'
     
+    #
+    # Setup view
+    #
+
+    # show 3D View
+    self.layoutManager= slicer.app.layoutManager()
+    self.layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
+    # quit box and axis
+    view = slicer.util.getNode('View1')
+    view.SetBoxVisible(0)
+    view.SetAxisLabelsVisible(0)
 
     # UI definition
 
@@ -346,7 +357,6 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
       return
       
     forcepsLeftModel = slicer.util.getNode(pattern="ForcepsLeftModel")
-    print(vrViewNode.GetLeftControllerTransformNodeID())
     forcepsLeftModel.SetAndObserveTransformNodeID(vrViewNode.GetLeftControllerTransformNodeID())
 
     forcepsRightModel = slicer.util.getNode(pattern="ForcepsRightModel")
