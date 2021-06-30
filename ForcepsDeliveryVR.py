@@ -157,13 +157,28 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     self.loadDataButton.enabled = True
     initFormLayout.addRow(self.loadDataButton)  
 
+    self.configCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.configCollapsibleButton.text = "CONFIGURATION"
+    self.layout.addWidget(self.configCollapsibleButton)
+
+    # Layout within the dummy collapsible button
+    configFormLayout = qt.QFormLayout(self.configCollapsibleButton)
+
+    # Reset view
+    self.resetVRViewButton = qt.QPushButton()
+    self.resetVRViewButton.enabled = True
+    self.resetVRViewButton.setText('Reset VR View')
+    configFormLayout.addRow(self.resetVRViewButton)
+
     # Controllers visibility
     self.controllersVisibilitySelection = qt.QHBoxLayout()
-    initFormLayout.addRow(self.controllersVisibilitySelection)
+    configFormLayout.addRow(self.controllersVisibilitySelection)
     self.controllersVisibilityCheckBox = qt.QCheckBox('Hide controllers')
     self.controllersVisibilityCheckBox.checkable = True
     self.controllersVisibilityCheckBox.checked = True
     self.controllersVisibilitySelection.addWidget(self.controllersVisibilityCheckBox)
+
+
 
     # add here remaining ui objects
     # ...
@@ -189,6 +204,8 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
 
     # CONFIGURATION
     self.controllersVisibilityCheckBox.connect('clicked(bool)', self.onControllerVisibilityCheckBoxClicked)
+    self.resetVRViewButton.connect('clicked(bool)', self.onResetVRViewButtonClicked)
+
 
 
   def cleanup(self):
@@ -285,9 +302,10 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     
 
     self.logic.applyForcepsTransform()
-
+    self.logic.resetVRView(125)
 
     self.loadDataButton.enabled = False
+
 
   def onControllerVisibilityCheckBoxClicked(self):
     logging.debug('change controller visibility')
@@ -295,6 +313,11 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
       self.logic.changeControllerVisibility(False)
     else:
       self.logic.changeControllerVisibility(True)
+
+  def onResetVRViewButtonClicked(self):
+    logging.debug('reset VR view')
+    zoomOut = 100
+    self.logic.resetVRView(zoomOut)
 
     
 
@@ -368,32 +391,71 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
     vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
     vrViewNode.SetControllerModelsVisible(display)
 
+  def resetVRView(self, zoomOut):
+    vrLogic = slicer.modules.virtualreality.logic()
+    vrViewNode = vrLogic.GetVirtualRealityViewNode()
+    HMD_transform = vrViewNode.GetHMDTransformNode()
+    try:
+      modelHMDTransform = slicer.util.getNode('modelHMDTransform')
+    except:
+      modelHMDTransform = slicer.vtkMRMLLinearTransformNode()
+      modelHMDTransform.SetName('modelHMDTransform')
+      slicer.mrmlScene.AddNode(modelHMDTransform)
+    # get the translation components from the HMD transform
+    t_r = HMD_transform.GetMatrixTransformToParent().GetElement(0,3)
+    t_a = HMD_transform.GetMatrixTransformToParent().GetElement(1,3)
+    t_s = HMD_transform.GetMatrixTransformToParent().GetElement(2,3)
+    cam = vrCamera()
+    modelTransform = vtk.vtkMatrix4x4()
+    modelHMDTransform.GetMatrixTransformToParent(modelTransform)
+    modelTransform.Identity()
+    modelTransform.SetElement(0, 3, t_r)
+    modelTransform.SetElement(1, 3, t_a - zoomOut)
+    modelTransform.SetElement(2, 3, t_s - 40)
+    cam.SetModelTransformMatrix(modelTransform)
+    modelHMDTransform.SetMatrixTransformToParent(modelTransform)
+    # make the controllers coincide with the user (HMD) position in the VR scene
+    # clone the transform
+    nodeToClone = slicer.util.getNode('modelHMDTransform')
+    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+    itemIDToClone = shNode.GetItemByDataNode(nodeToClone)
+    clonedItemID = slicer.modules.subjecthierarchy.logic().CloneSubjectHierarchyItem(shNode, itemIDToClone)
+    viewControllersTransform = shNode.GetItemDataNode(clonedItemID)
+    # invert
+    viewControllersTransform.Inverse()
+    # make the controllers (forceps) observe that transform
+    leftControllerTransform = vrViewNode.GetLeftControllerTransformNode()
+    rightControllerTransform = vrViewNode.GetRightControllerTransformNode()
+    leftControllerTransform.SetAndObserveTransformNodeID(viewControllersTransform.GetID())
+    rightControllerTransform.SetAndObserveTransformNodeID(viewControllersTransform.GetID())
+
+
 
   
-  def isVRInitialized():
-    """Determine if VR has been initialized
-    """
-    vrLogic = slicer.modules.virtualreality.logic()
-    if (vrLogic is None
-        or vrLogic.GetVirtualRealityViewNode() is None
-        or not vrLogic.GetVirtualRealityViewNode().GetVisibility()
-        or not vrLogic.GetVirtualRealityViewNode().GetActive()):
-        return False
-    return True
+def isVRInitialized():
+  """Determine if VR has been initialized
+  """
+  vrLogic = slicer.modules.virtualreality.logic()
+  if (vrLogic is None
+      or vrLogic.GetVirtualRealityViewNode() is None
+      or not vrLogic.GetVirtualRealityViewNode().GetVisibility()
+      or not vrLogic.GetVirtualRealityViewNode().GetActive()):
+      return False
+  return True
 
-  def vrCamera():
-    # Get VR module widget
-    if not isVRInitialized():
-        return None
-    # Get VR camera
-    vrViewWidget = slicer.modules.virtualreality.viewWidget()
-    if vrViewWidget is None:
+def vrCamera():
+  # Get VR module widget
+  if not isVRInitialized():
       return None
-    rendererCollection = vrViewWidget.renderWindow().GetRenderers()
-    if rendererCollection.GetNumberOfItems() < 1:
-        logging.error('Unable to access VR renderers')
-        return None
-    return rendererCollection.GetItemAsObject(0).GetActiveCamera()
+  # Get VR camera
+  vrViewWidget = slicer.modules.virtualreality.viewWidget()
+  if vrViewWidget is None:
+    return None
+  rendererCollection = vrViewWidget.renderWindow().GetRenderers()
+  if rendererCollection.GetNumberOfItems() < 1:
+      logging.error('Unable to access VR renderers')
+      return None
+  return rendererCollection.GetItemAsObject(0).GetActiveCamera()
 
 
 
