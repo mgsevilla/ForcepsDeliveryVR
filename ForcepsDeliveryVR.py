@@ -4,6 +4,7 @@ import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+import numpy as np
 
 #
 # ForcepsDeliveryVR
@@ -119,7 +120,7 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     # CREATE PATHS
     self.ForcepsDeliveryVR_modelsPath = slicer.modules.forcepsdeliveryvr.path.replace("ForcepsDeliveryVR.py","") + 'Resources/Models/'
     self.ForcepsDeliveryVR_phaseTextsPath = slicer.modules.forcepsdeliveryvr.path.replace("ForcepsDeliveryVR.py","") + 'Resources/Models/Texts/'
-
+    self.ForcepsDeliveryVR_dataPath = slicer.modules.forcepsdeliveryvr.path.replace("ForcepsDeliveryVR.py","") + 'Resources/Data/'
     
     self.ForcepsDeliveryVR_iconsPath = slicer.modules.forcepsdeliveryvr.path.replace("ForcepsDeliveryVR.py","") + 'Resources/Data/Icons/'
     # ICONS
@@ -640,7 +641,7 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
       self.finalPlacementRightModelDisplay=self.finalPlacementRightModel.GetModelDisplayNode()
       self.finalPlacementRightModelDisplay.SetVisibility(False)
     
-
+    
     self.logic.applyForcepsTransform()
     self.logic.resetVRView(125)
 
@@ -807,24 +808,23 @@ class ForcepsDeliveryVRWidget(ScriptedLoadableModuleWidget, VTKObservationMixin)
     forcepsLeftModelDisplay = slicer.util.getNode('ForcepsLeftModel').GetModelDisplayNode()
     forcepsRightModelDisplay = slicer.util.getNode('ForcepsRightModel').GetModelDisplayNode()
     if self.start_arrangement.text == 'Stop':
-      margin = 5 + self.errorMargin_dist
-      res, message = self.logic.checkArrangement(margin)
+      margin = [0.2, 5]
+      message, res = self.logic.checkArrangement(margin)
       if res:
         # self.displayCornerAnnotation(True, message)
-        print('Correct!')
+        print(message)
         forcepsLeftModelDisplay.SetColor([0,1,0])
         forcepsRightModelDisplay.SetColor([0,1,0])
       else:
         # self.displayCornerAnnotation(False, message)
-        print('Incorrect')
+        print(message)
         forcepsLeftModelDisplay.SetColor([1,0,0])
         forcepsRightModelDisplay.SetColor([1,0,0])
           
     elif self.start_presentation.text == 'Stop':
       # error in degrees
-      margin = 22.5 + self.errorMargin_angle
-      marginVertical = 0 + self.errorMargin_dist
-      res, message = self.logic.checkPresentation(margin, marginVertical)
+      margin = 0.3
+      message, res = self.logic.checkPresentation(margin)
       if res:
         # self.displayCornerAnnotation(True, message)
         print('Correct!')
@@ -1003,95 +1003,73 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
 
   def checkArrangement(self,margin):
     message = ''
-    print('checking')
-    return True, message
-    # # build transform tree to depend on ForcepsL
-    # transformName = 'VirtualReality.LeftController'
-    # if self.buildTransformTree(transformName):
-    #   # get distances in every axis
-    #   fiducials1name = 'CheckFiducialsL'
-    #   fiducials2name = 'CheckFiducialsR'
-    #   r,a,s = self.getDistanceCoordinates(fiducials1name,fiducials2name)
-    #   # check if coordinates in A are within the margins
-    #   num_fids = np.size(a)
-    #   fidOutOfMargins = False
-    #   # check in AP direction
-    #   for i in range(num_fids):
-    #     if not (-margin)<np.abs(a[i])<=(margin):
-    #     #   print 'Arrangement CORRECT in fiducial ' + str(i) + ' (forwards)'
-    #     # else:
-    #       # print 'Arrangement INCORRECT in fiducial ' + str(i) + ' (forwards)'
-    #       fidOutOfMargins = True
-    #       message = message + 'HANDLES NOT AT THE SAME LEVEL\n'
-    #       break
-    #   for i in range(num_fids-1):
-    #     if not (-margin)<np.abs(r[i])<=(margin):
-    #     #   print 'Arrangement CORRECT in fiducial ' + str(i) + ' (horizontal)'
-    #     # else:
-    #     #   print 'Arrangement INCORRECT in fiducial ' + str(i) + ' (horizontal)'
-    #       fidOutOfMargins = True
-    #       message = message + 'FORCEPS NOT CORRECTLY CLOSED\n'
-    #       break
-    #   if fidOutOfMargins:
-        
-    #     return False, message
-    #   else:
-    #     return True, message
+    # get controller transforms
+    vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
+    leftControllerTransform = vrViewNode.GetLeftControllerTransformNode()
+    rightControllerTransform = vrViewNode.GetRightControllerTransformNode()
+    # access diagonal components for rotation
+    rl = [0,0,0]
+    rr = [0,0,0]
+    rl[0] = leftControllerTransform.GetMatrixTransformToParent().GetElement(0,0)
+    rl[1] = leftControllerTransform.GetMatrixTransformToParent().GetElement(1,1)
+    rl[2] = leftControllerTransform.GetMatrixTransformToParent().GetElement(2,2)
+    rr[0] = rightControllerTransform.GetMatrixTransformToParent().GetElement(0,0)
+    rr[1] = rightControllerTransform.GetMatrixTransformToParent().GetElement(1,1)
+    rr[2] = rightControllerTransform.GetMatrixTransformToParent().GetElement(2,2)
+    # get difference
+    diff_r = np.array(rl)-np.array(rr)
+    # print('rotation differences: ' + str(diff_r[0]) + ' ' +  str(diff_r[1]) + ' ' +  str(diff_r[2]))
+    forceps_rotated = np.any(diff_r>margin[0])
+    if forceps_rotated:
+      message = 'FORCEPS NOT CORRECTLY CLOSED'
+      res = False
+      return message, res
+    else:
+      # access translation components
+      tl = [0,0,0]
+      tr = [0,0,0]
+      tl[0] = leftControllerTransform.GetMatrixTransformToParent().GetElement(0,3)
+      tl[1] = leftControllerTransform.GetMatrixTransformToParent().GetElement(1,3)
+      tl[2] = leftControllerTransform.GetMatrixTransformToParent().GetElement(2,3)
+      tr[0] = rightControllerTransform.GetMatrixTransformToParent().GetElement(0,3)+10
+      tr[1] = rightControllerTransform.GetMatrixTransformToParent().GetElement(1,3)
+      tr[2] = rightControllerTransform.GetMatrixTransformToParent().GetElement(2,3)
+      # get difference
+      diff_t = np.array(tl)-np.array(tr)
+      # print('translation differences: ' + str(diff_t[0]) + ' ' +  str(diff_t[1]) + ' ' +  str(diff_t[2]))
+      forceps_translated = np.any(np.abs(diff_t)>margin[1])
+      if forceps_translated:
+        message = 'HANDLES NOT AT THE SAME LEVEL'
+        res = False
+        return message, res
+      else:
+        message = 'CORRECT!'
+        res = True
+        return message, res
 
-  def checkPresentation(self,margin,marginVertical):
-    message = ''
-    return True, message
-    # # build transform tree to depend on Baby
-    # transformName = 'BabyHeadModelToBabyHead'
-    # if self.buildTransformTree(transformName):
-    #   # get distances in every axis
-    #   fiducials1name = 'CheckFiducialsL'
-    #   fiducials2name = 'CheckFiducialsR'
-    #   r,a,s = self.getDistanceCoordinates(fiducials1name,fiducials2name)
-    #   # check if coordinates in A are within the margins
-    #   num_fids = np.size(a)
-    #   fidOutOfMargins = False
-    #   # check in IS direction
-    #   for i in range(num_fids-1):
-    #     if not s[i]<(marginVertical):
-    #     #   print 'Arrangement CORRECT in fiducial ' + str(i) + ' (vertical)'
-    #     # else:
-    #     #   print 'Arrangement INCORRECT in fiducial ' + str(i) + ' (vertical)'
-    #       fidOutOfMargins = True
-    #       message = message + 'FORCEPS UPSIDE DOWN\n'
-    #       break
-    #   # check if rotation in A is bigger than the margin
-    #   fiducials1name_ideal = 'CheckFiducialsL_finalPosition'
-    #   fiducials2name_ideal = 'CheckFiducialsR_finalPosition'
-    #   anglesL, translationL = self.checkRegistrationComponents(fiducials1name, fiducials1name_ideal)
-    #   anglesR, translationR = self.checkRegistrationComponents(fiducials2name, fiducials2name_ideal)
-    #   for i in range(3):
-    #     anglesL[i] = math.degrees(anglesL[i])
-    #     # print 'Angle L ' + str(i) + ': ' + str(anglesL[i])
-    #     anglesR[i] = math.degrees(anglesR[i])
-    #     # print 'Angle R ' + str(i) + ': ' + str(anglesR[i])
-    #   if np.abs(anglesL[1])>margin:
-    #     fidOutOfMargins = True
-    #     # print 'Rotation of Forceps Left of: ' + str(anglesL[1]) + ' degrees in AP'
-    #     message = message + 'LEFT FORCEPS ROTATED\n'
-    #   if np.abs(anglesR[1])>margin:
-    #     fidOutOfMargins = True
-    #     # print 'Rotation of Forceps Right of: ' + str(anglesR[1]) + ' degrees in AP'
-    #     message = message + 'RIGHT FORCEPS ROTATED\n'
-    #   # remove created nodes
-    #   fidsWorld = slicer.util.getNode('FidsWorld')
-    #   slicer.mrmlScene.RemoveNode(fidsWorld)
-    #   fidsWorld = slicer.util.getNode('FidsWorld')
-    #   slicer.mrmlScene.RemoveNode(fidsWorld)
-    #   regL = slicer.util.getNode('RegistrationCheckRotation')
-    #   slicer.mrmlScene.RemoveNode(regL)
-    #   regR = slicer.util.getNode('RegistrationCheckRotation')
-    #   slicer.mrmlScene.RemoveNode(regR)
 
-    #   if fidOutOfMargins:
-    #     return False, message
-    #   else:
-    #     return True, message
+  def checkPresentation(self,margin):
+    vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
+    leftControllerTransform = vrViewNode.GetLeftControllerTransformNode()
+    rightControllerTransform = vrViewNode.GetRightControllerTransformNode()
+    # access first component of rotation
+    rl = leftControllerTransform.GetMatrixTransformToParent().GetElement(0,0)
+    rr = rightControllerTransform.GetMatrixTransformToParent().GetElement(0,0)
+    rl_y = leftControllerTransform.GetMatrixTransformToParent().GetElement(1,1)
+    rr_y = rightControllerTransform.GetMatrixTransformToParent().GetElement(1,1)
+    # compute error
+    el = np.abs(rl + 1)
+    er = np.abs(rr + 1)
+    forceps_rotated = np.any(np.array([el,er, np.abs(rl_y), np.abs(rr_y)])>margin)
+
+    if forceps_rotated:
+      message = 'FORCEPS ROTATED'
+      res = False
+      return message, res
+    else:
+      message = 'CORRECT!'
+      res = True
+      return message, res
 
 
 
@@ -1248,6 +1226,91 @@ class ForcepsDeliveryVRLogic(ScriptedLoadableModuleLogic):
     #     return False, message
     #   else:
     #     return True, message
+
+
+  # def buildTransformTree(self, transformName):
+  #   # get the desired 'root' transform
+  #   rootTransform = slicer.util.getNode(transformName)
+  #   if not rootTransform:
+  #     print('Error when loading ' + transformName)
+  #     return False
+  #   else:
+  #     # get the inverse
+  #     transform_inverted = self.invertTransform(transformName)
+  #     # get all XToTracker transforms except transformName
+  #     vrViewNode = self.vrLogic.GetVirtualRealityViewNode()
+  #     leftControllerTransform = vrViewNode.GetLeftControllerTransformNode()
+  #     if not leftControllerTransform:
+  #       print('leftControllerTransform not found')
+  #       return False
+  #     rightControllerTransform = vrViewNode.GetRightControllerTransformNode()
+  #     if not rightControllerTransform:
+  #       print('rightControllerTransform not found')
+  #       return False
+  #     # babyHeadToTracker = slicer.util.getNode('BabyHeadToTracker')
+  #     # if not babyHeadToTracker:
+  #     #   print 'BabyHeadToTracker not found'
+  #     #   return False
+  #     # babyBodyToTracker = slicer.util.getNode('BabyBodyToTracker')
+  #     # if not babyBodyToTracker:
+  #     #   print 'BabyBodyToTracker not found'
+  #     #   return False
+  #     # motherToTracker = slicer.util.getNode('MotherToTracker')
+  #     # if not motherToTracker:
+  #     #   print 'MotherToTracker not found'
+  #     #   return False
+  #     # get the trackerToTool transform for the ToolModelToTool transform
+  #     fidsName = []
+  #     if transformName == leftControllerTransform.GetName():
+  #       trackerTransformName_inv = transformName + '_inv'
+  #       modelName = ['ForcepsLeftModel']
+  #       fidsName = ['CheckFiducialsL','CheckFiducialsL_plane']
+  #     elif transformName == rightControllerTransform.GetName():
+  #       trackerTransformName_inv = transformName + '_inv'
+  #       modelName = ['ForcepsRightModel']
+  #       fidsName = ['CheckFiducialsR','CheckFiducialsR_plane']
+  #     else:
+  #       print('Input transform for tree not valid')
+  #       return False
+  #     trackerTransform_inv = self.invertTransform(transformName)
+
+  #     # make the models observe the inverse transform from the tracker
+  #     if transformName != leftControllerTransform.GetName():
+  #       leftControllerTransform.SetAndObserveTransformNodeID(trackerTransform_inv.GetID())
+  #     if transformName != rightControllerTransform.GetName():
+  #       rightControllerTransform.SetAndObserveTransformNodeID(trackerTransform_inv.GetID())
+
+  #     # Get models and fiducials of selected transform and take them out of it
+  #     for name in modelName:
+  #       model = slicer.util.getNode(name)
+  #       if model:
+  #         model.SetAndObserveTransformNodeID(None)
+      
+  #     if len(fidsName) > 0:
+  #       num_fids = len(fidsName)
+  #       for i in range(num_fids):
+  #         fids = slicer.util.getNode(fidsName[i])
+  #         fids.SetAndObserveTransformNodeID(None)
+  #     return True
+
+
+  def invertTransform(self,transformName):
+    transform = slicer.util.getNode(transformName)
+    transform_matrix = vtk.vtkMatrix4x4()
+    # Obtain matrices from tranformation nodes
+    transform.GetMatrixTransformToParent(transform_matrix)
+    transform_matrix.Invert()
+    # create new transform
+    name = transformName + '_inv'
+    transformationNode = slicer.util.getNode(name)
+    if not transformationNode:
+      transformationNode=slicer.vtkMRMLLinearTransformNode()
+      transformationNode.SetName(name)
+      slicer.mrmlScene.AddNode(transformationNode)
+      transformationNode.SetMatrixTransformToParent(transform_matrix)
+    return transformationNode
+
+
 
 
 
